@@ -5,6 +5,9 @@ import os
 import mediapipe as mp
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.callbacks import TensorBoard
 
 
 def drawCustomLandmarks(image, results, holistic):
@@ -125,6 +128,44 @@ def collectData2():
         cv.destroyAllWindows()
 
 
+def preprocessData():
+    actions = np.array(['left', 'right', 'straight'])
+    DATA_PATH = os.path.join('Extracted_Values')
+    label_map = {label: num for num, label in enumerate(actions)}
+    sequenceLength = 80  # Reduce to the 80 frames due to the different video length
+
+    files, labels = [], []
+    for action in actions:
+        for file in os.listdir('Dataset2/' + action):
+            window = []
+            for frame in range(sequenceLength):
+                res = np.load(os.path.join(DATA_PATH, action, str(file), "{}.npy".format(frame)))
+                window.append(res)
+            files.append(window)
+            labels.append(label_map[action])
+
+    X = np.array(files)
+    y = to_categorical(labels).astype(int)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.05)
+
+    logDir = os.path.join('Logs')
+    tb_callback = TensorBoard(log_dir=logDir)
+
+    model = Sequential()  # Instance model
+
+    model.add(LSTM(64, return_sequences=True, activation='relu', input_shape=(80, 1404)))
+    model.add(LSTM(128, return_sequences=True, activation='relu'))
+    model.add(LSTM(64, return_sequences=False, activation='relu'))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(actions.shape[0], activation='softmax'))
+
+    model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['categorical_accuracy'])
+
+    model.fit(X_train, y_train, epochs=2000, callbacks=[tb_callback])
+
+
 def mediapipeDetection(image, model):
     """Performs face detection with use of mediapipe holistic model
 
@@ -147,4 +188,5 @@ def mediapipeDetection(image, model):
 
 
 if __name__ == '__main__':
-    collectData2()
+    # collectData2()
+    preprocessData()
