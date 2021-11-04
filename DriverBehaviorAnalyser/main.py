@@ -5,6 +5,11 @@ import os
 import mediapipe as mp
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.callbacks import TensorBoard
+
+from sklearn.metrics import multilabel_confusion_matrix, accuracy_score
 
 
 def drawCustomLandmarks(image, results, holistic):
@@ -15,12 +20,10 @@ def drawCustomLandmarks(image, results, holistic):
                               mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=1,
                                                      circle_radius=1))
 
-
 def extractKeypoints(result):
     face = np.array([[res.x, res.y, res.z] for res in result.face_landmarks.landmark]).flatten() \
         if result.face_landmarks else np.zeros(1404)
     return face
-
 
 def collectData():
     DATA_PATH = os.path.join('Extracted_Values')
@@ -67,6 +70,44 @@ def collectData():
         cap.release()
         cv.destroyAllWindows()
 
+def faceRecognition():
+    actions = np.array(['left', 'right', 'straight'])
+    DATA_PATH = os.path.join('Extracted_Values')
+
+
+
+    mp_holistic = mp.solutions.holistic  # Holistic model
+    mp_drawing = mp.solutions.drawing_utils  # Drawing utilities
+
+    with mp_holistic.Holistic(min_detection_confidence=0.6, min_tracking_confidence=0.6) as holistic:
+        for action in actions:
+            for file in os.listdir('Dataset2/' + action):
+                cap = cv.VideoCapture('Dataset2/' + action + "/" + file)
+                frameCount = int(cap.get(cv.CAP_PROP_FRAME_COUNT))  # Count the number of frames in each video
+                for frameNumber in range(frameCount):
+
+                    ret, frame = cap.read()  # Read the data frame
+
+                    if not ret:  # Error handling
+                        print("Can't receive frame!")
+                        break
+
+                    frame = cv.resize(frame, None, fx=0.5, fy=0.5,
+                                      interpolation=cv.INTER_LINEAR)  # Resize the image for better performance
+
+                    image, results = mediapipeDetection(frame, holistic)
+                    mp_drawing.draw_landmarks(image, results.face_landmarks, mp_holistic.FACE_CONNECTIONS,
+                                              mp_drawing.DrawingSpec(color=(80, 110, 10), thickness=1, circle_radius=1),
+                                              mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=1,
+                                                                     circle_radius=1))  # Draw the landmarks on the image
+
+
+                    cv.imshow('Video', image)
+
+                    if cv.waitKey(10) == ord('q'):
+                        break
+        cap.release()
+        cv.destroyAllWindows()
 
 def createDirectories(actions, numberOfSequences, pathData):
     for action in actions:
@@ -98,7 +139,7 @@ def collectData2():
                 frameCount = int(cap.get(cv.CAP_PROP_FRAME_COUNT))  # Count the number of frames in each video
                 for frameNumber in range(frameCount):
 
-                    ret, frame = cap.read()  # Read the data frame
+                    ret, frame = cap.read()
 
                     if not ret:  # Error handling
                         print("Can't receive frame!")
@@ -106,7 +147,6 @@ def collectData2():
 
                     frame = cv.resize(frame, None, fx=0.5, fy=0.5,
                                       interpolation=cv.INTER_LINEAR)  # Resize the image for better performance
-
                     image, results = mediapipeDetection(frame, holistic)
                     mp_drawing.draw_landmarks(image, results.face_landmarks, mp_holistic.FACE_CONNECTIONS,
                                               mp_drawing.DrawingSpec(color=(80, 110, 10), thickness=1, circle_radius=1),
@@ -124,6 +164,53 @@ def collectData2():
         cap.release()
         cv.destroyAllWindows()
 
+
+def preprocessData():
+    actions = np.array(['left', 'right', 'straight'])
+    DATA_PATH = os.path.join('Extracted_Values')
+    label_map = {label: num for num, label in enumerate(actions)}
+    sequenceLength = 80  # Reduce to the 80 frames due to the different video length
+
+    files, labels = [], []
+    for action in actions:
+        for file in os.listdir('Dataset2/' + action):
+            window = []
+            for frame in range(sequenceLength):
+                res = np.load(os.path.join(DATA_PATH, action, str(file), "{}.npy".format(frame)))
+                window.append(res)
+            files.append(window)
+            labels.append(label_map[action])
+
+    X = np.array(files)
+    y = to_categorical(labels).astype(int)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.05)
+
+    logDir = os.path.join('Logs')
+    tb_callback = TensorBoard(log_dir=logDir)
+
+    model = Sequential()  # Model instance
+
+    model.add(LSTM(64, return_sequences=True, activation='relu', input_shape=(80, 1404)))
+    model.add(LSTM(128, return_sequences=True, activation='relu'))
+    model.add(LSTM(64, return_sequences=False, activation='relu'))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(actions.shape[0], activation='softmax'))
+
+    model.compile(optimizer='Adamax', loss='categorical_crossentropy', metrics=['categorical_accuracy'])
+
+    model.fit(X_train, y_train, epochs=1000, callbacks=[tb_callback])
+
+    # Save Weights
+    model.save('action.h5')
+    model.load_weights('action.h5')
+
+    yhat = model.predict(X_train)
+    ytrue = np.argmax(y_train, axis=1).tolist()
+    yhat = np.argmax(yhat, axis=1).tolist()
+
+    print(accuracy_score(ytrue, yhat))
 
 def mediapipeDetection(image, model):
     """Performs face detection with use of mediapipe holistic model
@@ -147,4 +234,6 @@ def mediapipeDetection(image, model):
 
 
 if __name__ == '__main__':
-    collectData2()
+    # collectData2()
+    preprocessData()
+    #faceRecognition()
