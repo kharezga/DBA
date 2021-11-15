@@ -2,6 +2,7 @@ import cv2 as cv
 import numpy as np
 import os
 import mediapipe as mp
+import shutil
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.models import Sequential
@@ -66,7 +67,8 @@ def probabilityBar(res, actions, frame):
     out_frame = frame.copy()
     for num, prob in enumerate(res):
         cv.rectangle(out_frame, (0, 60 + num * 40), (int(prob * 100), 90 + num * 40), colors[num], -1)
-        cv.putText(out_frame,actions[num], (0, 85 + num * 40), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv.LINE_AA)
+        cv.putText(out_frame, actions[num], (0, 85 + num * 40), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2,
+                   cv.LINE_AA)
     return out_frame
 
 
@@ -99,7 +101,7 @@ def makePredictions():
             sequence = sequence[:150]
 
             if len(sequence) == 150:
-                #res = model.predict(np.expand_dims(sequence, axis=0))[0]
+                # res = model.predict(np.expand_dims(sequence, axis=0))[0]
                 print(actions[np.argmax(res)])
 
             res = model.predict(np.expand_dims(sequence, axis=0))[0]
@@ -111,5 +113,28 @@ def makePredictions():
     cv.destroyAllWindows()
 
 
+def extractAvi():
+    """
+    Extraction algorithm which extracts .avi videos from the raw dataset
+    """
+    actions = np.array(['rturn', 'rchange', 'lturn', 'lchange', 'straight'])
+    os.chdir('Full_Dataset')
+    for action in actions:
+        dest = '/Users/kacpe/OneDrive/Pulpit/DBA/DriverBehaviorAnalyser/Extracted_Videos_Avi2/' + str(action)
+        os.chdir(action)
+        for folder in os.listdir():
+            os.chdir(folder)
+            for file in os.listdir():
+                if file == 'Extracted_Videos_Avi':
+                    pass
+                else:
+                    shutil.copy(file, dest)
+            os.chdir('..')
+        os.chdir('..')
+
+
 if __name__ == '__main__':
-    makePredictions()
+    # makePredictions()
+    # print(os.getcwd())
+     extractAvi()
+    #DriverAnalyser.collectData2()
