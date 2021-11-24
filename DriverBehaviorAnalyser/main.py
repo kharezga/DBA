@@ -12,6 +12,7 @@ from sklearn.metrics import multilabel_confusion_matrix, accuracy_score
 
 import DriverAnalyser
 import Model
+import DriverPrediction
 
 
 def preprocessData():
@@ -72,7 +73,45 @@ def probabilityBar(res, actions, frame):
     return out_frame
 
 
-def makePredictions():
+def makePredictionOnWebcam():
+    # TODO: Poprawić implementacje Real-Time. Caly czs wyrzuca rezultat że jade w lewo nie jadąc w lewo
+
+    sequence = []
+    actions = np.array(['left', 'right', 'straight'])
+    mp_holistic = mp.solutions.holistic
+
+    model = Model.createModel('Adamax', actions)  # New LSTM model
+    model.load_weights('action.h5')  # Load weights into the network
+
+    cap = cv.VideoCapture(0)  # Capture the video from a webcam
+
+    with mp_holistic.Holistic(min_detection_confidence=0.6, min_tracking_confidence=0.6) as holistic:
+        while cap.isOpened():
+            ret, frame = cap.read()
+
+            image, results = DriverAnalyser.faceFeaturesDetection(frame, holistic)  # Detect face landmarks of a driver
+            DriverAnalyser.drawCustomLandmarks(image, results, mp_holistic)  # Customize the landmarks
+
+            # Prediction logic
+            keypoints = DriverAnalyser.extractKeypoints(results)    # Extract the keypoints of the face
+            sequence.insert(0, keypoints)
+            sequence = sequence[:80]   # Load last 150 values
+
+            if len(sequence) == 80:
+                res = model.predict(np.expand_dims(sequence, axis=0))[0]
+                print(actions[np.argmax(res)])
+
+            res = model.predict(np.expand_dims(sequence, axis=0))[0]
+            image = probabilityBar(res, actions, image)
+
+            cv.imshow('Image', image)
+            if cv.waitKey(10) & 0xFF == ord('q'):
+                break
+    cap.release()
+    cv.destroyAllWindows()
+
+
+def makePredictions(testVideo):
     sequence = []
     actions = np.array(['left', 'right', 'straight'])
 
@@ -81,7 +120,7 @@ def makePredictions():
     model = Model.createModel('Adamax', actions)  # New LSTM model
     model.load_weights('action.h5')  # Load weights into the network
 
-    cap = cv.VideoCapture('test_vid3.avi')
+    cap = cv.VideoCapture(testVideo)
 
     with mp_holistic.Holistic(min_detection_confidence=0.6, min_tracking_confidence=0.6) as holistic:
         while cap.isOpened():
@@ -134,7 +173,13 @@ def extractAvi():
 
 
 if __name__ == '__main__':
-    # makePredictions()
-    # print(os.getcwd())
-     extractAvi()
-    #DriverAnalyser.collectData2()
+    # TODO: Opreacja Real-Time
+    # TODO: Zoptymalizować model
+    # TODO: Implementacja facemesh
+    # TODO: Dodanie refine landmakrs
+
+     makePredictions('test_vid_left.avi')
+    #makePredictionOnWebcam()
+    # extractAvi()
+    # DriverAnalyser.collectData2()
+    # DriverPrediction.preprocessData2()
