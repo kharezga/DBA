@@ -80,8 +80,8 @@ def makePredictionOnWebcam():
     actions = np.array(['left', 'right', 'straight'])
     mp_holistic = mp.solutions.holistic
 
-    model = Model.createModel('Adamax', actions)  # New LSTM model
-    model.load_weights('action.h5')  # Load weights into the network
+    model = Model.createModelWithoutDense('Adam', actions, 50) # New LSTM model
+    model.load_weights('action_sorted.h5')  # Load weights into the network
 
     cap = cv.VideoCapture(0)  # Capture the video from a webcam
 
@@ -90,21 +90,23 @@ def makePredictionOnWebcam():
             ret, frame = cap.read()
 
             image, results = DriverAnalyser.faceFeaturesDetection(frame, holistic)  # Detect face landmarks of a driver
-            DriverAnalyser.drawCustomLandmarks(image, results, mp_holistic)  # Customize the landmarks
+            #DriverAnalyser.drawCustomLandmarks(image, results, mp_holistic)  # Customize the landmarks
 
             # Prediction logic
             keypoints = DriverAnalyser.extractKeypoints(results)    # Extract the keypoints of the face
             sequence.insert(0, keypoints)
-            sequence = sequence[:80]   # Load last 150 values
+            sequence = sequence[:50]   # Load last 150 values
 
-            if len(sequence) == 80:
+            if len(sequence) == 50:
                 res = model.predict(np.expand_dims(sequence, axis=0))[0]
                 print(actions[np.argmax(res)])
+                image = probabilityBar(res, actions, image)
 
-            res = model.predict(np.expand_dims(sequence, axis=0))[0]
-            image = probabilityBar(res, actions, image)
+            #res = model.predict(np.expand_dims(sequence, axis=0))[0]
+            #image = probabilityBar(res, actions, image)
 
             cv.imshow('Image', image)
+
             if cv.waitKey(10) & 0xFF == ord('q'):
                 break
     cap.release()
@@ -117,8 +119,8 @@ def makePredictions(testVideo):
 
     mp_holistic = mp.solutions.holistic  # Holistic model
 
-    model = Model.createModel('Adamax', actions)  # New LSTM model
-    model.load_weights('action.h5')  # Load weights into the network
+    model = Model.createModelWithoutDense('Adam', actions)  # New LSTM model
+    model.load_weights('action_sorted.h5')  # Load weights into the network
 
     cap = cv.VideoCapture(testVideo)
 
@@ -137,17 +139,20 @@ def makePredictions(testVideo):
             # Prediction logic
             keypoints = DriverAnalyser.extractKeypoints(results)
             sequence.append(keypoints)
-            sequence = sequence[:80]
+            sequence = sequence[:150]
 
-            if len(sequence) == 80:
-                #res = model.predict(np.expand_dims(sequence, axis=0))[0]
+            if len(sequence) == 150:
+                res = model.predict(np.expand_dims(sequence, axis=0))[0]
+                image = probabilityBar(res, actions, image)
                 print(actions[np.argmax(res)])
 
-            res = model.predict(np.expand_dims(sequence, axis=0))[0]
-            image = probabilityBar(res, actions, image)
+               # res = model.predict(np.expand_dims(sequence, axis=0))[0]
+                #print(actions[np.argmax(res)])
+
+
 
             cv.imshow('Image', image)
-            cv.waitKey(10)
+            cv.waitKey(1)
     cap.release()
     cv.destroyAllWindows()
 
@@ -177,11 +182,13 @@ if __name__ == '__main__':
     """
     Udało sie wyciagnac landmarki kazdej z wsporzednych (x,y,z) i zapisac je do tablicy numpy jak w poprzednim rozwiazaniu. Teraz trzeba 
     puscic caly dataset przez algorytm i te wartosci wrzucic do modelu. 
+    Zmienic przewidywanie zeby nie bylo po 150 klatkach tylko duzo szybicej  
     """
 
 
-    #makePredictions('test_vid_left.avi')
-    DriverAnalyser.collectDataWithIris()
-    print("DONE!")
+    #makePredictions('test_vid_left2.avi')
+    makePredictionOnWebcam()
+    #DriverAnalyser.collectDataWithIris()
+
     #DriverAnalyser.collectData2()
     # DriverPrediction.preprocessData2()

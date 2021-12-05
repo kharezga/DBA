@@ -1,5 +1,6 @@
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.layers import LSTM, Dense, Dropout, Flatten
+from keras.layers.wrappers import TimeDistributed
 
 
 def createModel(optimizer, actions):
@@ -25,5 +26,26 @@ def createModel(optimizer, actions):
     model.add(Dense(actions.shape[0], activation='softmax'))
 
     model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['categorical_accuracy'])
+
+    return model
+
+
+def createModelWithoutDense(optimizer, actions, seq_length):
+    if optimizer is None:
+        optimizer = 'Adam'
+
+    model = Sequential()  # Model instance
+
+    model.add(LSTM(64, return_sequences=True, activation='tanh', input_shape=(seq_length, 1404)))
+    model.add(TimeDistributed(Dropout(0.1)))
+    model.add(LSTM(128, return_sequences=True, activation='tanh'))
+    model.add(TimeDistributed(Dropout(0.1)))
+    model.add(LSTM(64, return_sequences=False, activation='tanh'))
+    model.add(Flatten())
+    model.add(Dense(actions.shape[0], activation='softmax'))
+
+    model.summary()
+
+    model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['categorical_accuracy'])
 
     return model
