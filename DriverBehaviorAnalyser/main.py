@@ -3,64 +3,26 @@ import numpy as np
 import os
 import mediapipe as mp
 import shutil
+
+#from keras.utils.vis_utils import plot_model
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 from tensorflow.keras.callbacks import TensorBoard
 from sklearn.metrics import multilabel_confusion_matrix, accuracy_score
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout, Flatten
+from tensorflow.keras.callbacks import TensorBoard
+from sklearn.metrics import multilabel_confusion_matrix, accuracy_score
+from keras.layers.wrappers import TimeDistributed
+from keras.utils.vis_utils import plot_model
 
 import DriverAnalyser
 import Model
 import DriverPrediction
-
-
-def preprocessData():
-    actions = np.array(['left', 'right', 'straight'])
-    DATA_PATH = os.path.join('Extracted_Values')
-    label_map = {label: num for num, label in enumerate(actions)}
-    sequenceLength = 80  # Reduce to the 80 frames due to the different video length
-
-    files, labels = [], []
-    for action in actions:
-        for file in os.listdir('Dataset2/' + action):
-            window = []
-            for frame in range(sequenceLength):
-                res = np.load(os.path.join(DATA_PATH, action, str(file), "{}.npy".format(frame)))
-                window.append(res)
-            files.append(window)
-            labels.append(label_map[action])
-
-    X = np.array(files)
-    y = to_categorical(labels).astype(int)
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.05)
-
-    logDir = os.path.join('Logs')
-    tb_callback = TensorBoard(log_dir=logDir)
-
-    model = Sequential()  # Model instance
-
-    model.add(LSTM(64, return_sequences=True, activation='relu', input_shape=(80, 1404)))
-    model.add(LSTM(128, return_sequences=True, activation='relu'))
-    model.add(LSTM(64, return_sequences=False, activation='relu'))
-    model.add(Dense(64, activation='relu'))
-    model.add(Dense(32, activation='relu'))
-    model.add(Dense(actions.shape[0], activation='softmax'))
-
-    model.compile(optimizer='Adamax', loss='categorical_crossentropy', metrics=['categorical_accuracy'])
-
-    model.fit(X_train, y_train, epochs=1000, callbacks=[tb_callback])
-
-    # Save Weights
-    model.save('action.h5')
-    model.load_weights('action.h5')
-
-    yhat = model.predict(X_train)
-    ytrue = np.argmax(y_train, axis=1).tolist()
-    yhat = np.argmax(yhat, axis=1).tolist()
-
-    print(accuracy_score(ytrue, yhat))
 
 
 def probabilityBar(res, actions, frame):
@@ -93,9 +55,9 @@ def makePredictionOnWebcam():
             DriverAnalyser.drawCustomLandmarks(image, results, mp_holistic)  # Customize the landmarks
 
             # Prediction logic
-            keypoints = DriverAnalyser.extractKeypoints(results)    # Extract the keypoints of the face
+            keypoints = DriverAnalyser.extractKeypoints(results)  # Extract the keypoints of the face
             sequence.insert(0, keypoints)
-            sequence = sequence[:80]   # Load last 150 values
+            sequence = sequence[:80]  # Load last 150 values
 
             if len(sequence) == 80:
                 res = model.predict(np.expand_dims(sequence, axis=0))[0]
@@ -173,13 +135,26 @@ def extractAvi():
 
 
 if __name__ == '__main__':
-    # TODO: Opreacja Real-Time
-    # TODO: Zoptymalizować model
-    # TODO: Implementacja facemesh
-    # TODO: Dodanie refine landmakrs
+    actions = np.array(['lchange', 'rchange', 'straight'])
 
-     makePredictions('test_vid_left.avi')
-    #makePredictionOnWebcam()
+    model = Sequential()  # Model instance
+
+    model.add(LSTM(64, return_sequences=True, activation='tanh', input_shape=(150, 1434)))
+    model.add(TimeDistributed(Dropout(0.1)))
+    model.add(LSTM(128, return_sequences=True, activation='tanh'))
+    model.add(TimeDistributed(Dropout(0.1)))
+    model.add(LSTM(64, return_sequences=False, activation='tanh'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(actions.shape[0], activation='softmax'))
+
+    model.summary()
+    plot_model(model, to_file='test.png', show_shapes=True, show_layer_names=True)
+
+    model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['accuracy', 'categorical_accuracy'])
+
+    # makePredictions('test_vid_left.avi')
+    # makePredictionOnWebcam()
     # extractAvi()
+    # DriverAnalyser.collectDataWithAccurateFace()
     # DriverAnalyser.collectData2()
     # DriverPrediction.preprocessData2()
